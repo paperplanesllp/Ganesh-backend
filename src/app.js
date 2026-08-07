@@ -16,15 +16,21 @@ import userRoutes from "./routes/userRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
-const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+]
+  .filter(Boolean)
+  .map((origin) => origin.trim().replace(/\/$/, ""));
 const allowedMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || origin === frontendUrl) {
+    if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
+    console.error("Blocked CORS origin:", origin);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,

@@ -5,7 +5,6 @@ let client;
 let clientKey = "";
 
 export function getPhonePeConfigurationStatus({ webhook = false } = {}) {
-  const enabled = String(process.env.PHONEPE_ENABLED || "").trim().toLowerCase() === "true";
   const environment = String(process.env.PHONEPE_ENV || "SANDBOX").trim().toUpperCase();
   const clientIdPresent = Boolean(String(process.env.PHONEPE_CLIENT_ID || "").trim());
   const clientSecretPresent = Boolean(String(process.env.PHONEPE_CLIENT_SECRET || "").trim());
@@ -15,15 +14,14 @@ export function getPhonePeConfigurationStatus({ webhook = false } = {}) {
   const webhookUsernamePresent = Boolean(String(process.env.PHONEPE_WEBHOOK_USERNAME || "").trim());
   const webhookPasswordPresent = Boolean(String(process.env.PHONEPE_WEBHOOK_PASSWORD || "").trim());
   const webhookConfigured = webhookUsernamePresent && webhookPasswordPresent;
+  const paymentConfigured = clientIdPresent
+    && clientSecretPresent
+    && clientVersionValid
+    && environmentValid;
 
   return {
-    configured: enabled
-      && clientIdPresent
-      && clientSecretPresent
-      && clientVersionValid
-      && environmentValid
-      && (!webhook || webhookConfigured),
-    enabled,
+    configured: paymentConfigured && (!webhook || webhookConfigured),
+    paymentConfigured,
     environment,
     environmentValid,
     clientIdPresent,
@@ -39,13 +37,15 @@ export function isPhonePeConfigured({ webhook = false } = {}) {
 }
 
 export function getPhonePeClient({ webhook = false } = {}) {
-  if (!isPhonePeConfigured({ webhook })) throw new ApiError(503, "PhonePe payment gateway is not configured yet.");
-  const version = Number(process.env.PHONEPE_CLIENT_VERSION);
-  if (!Number.isInteger(version) || version < 1) throw new ApiError(503, "PhonePe payment gateway is not configured yet.");
+  if (!isPhonePeConfigured({ webhook })) throw new ApiError(503, "PhonePe payment is currently unavailable.");
+  const clientId = String(process.env.PHONEPE_CLIENT_ID || "").trim();
+  const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
+  const version = Number(String(process.env.PHONEPE_CLIENT_VERSION || "").trim());
+  if (!Number.isInteger(version) || version < 1) throw new ApiError(503, "PhonePe payment is currently unavailable.");
   const environment = String(process.env.PHONEPE_ENV || "SANDBOX").trim().toUpperCase() === "PRODUCTION" ? Env.PRODUCTION : Env.SANDBOX;
-  const key = `${process.env.PHONEPE_CLIENT_ID}:${process.env.PHONEPE_CLIENT_SECRET}:${version}:${environment}`;
+  const key = `${clientId}:${clientSecret}:${version}:${environment}`;
   if (!client || clientKey !== key) {
-    client = StandardCheckoutClient.getInstance(process.env.PHONEPE_CLIENT_ID, process.env.PHONEPE_CLIENT_SECRET, version, environment);
+    client = StandardCheckoutClient.getInstance(clientId, clientSecret, version, environment);
     clientKey = key;
   }
   return client;
@@ -53,5 +53,8 @@ export function getPhonePeClient({ webhook = false } = {}) {
 
 export function getPhonePeWebhookCredentials() {
   getPhonePeClient({ webhook: true });
-  return { username: process.env.PHONEPE_WEBHOOK_USERNAME, password: process.env.PHONEPE_WEBHOOK_PASSWORD };
+  return {
+    username: String(process.env.PHONEPE_WEBHOOK_USERNAME || "").trim(),
+    password: String(process.env.PHONEPE_WEBHOOK_PASSWORD || "").trim(),
+  };
 }

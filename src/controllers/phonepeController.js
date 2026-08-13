@@ -1,11 +1,12 @@
+import { createHash } from "crypto";
 import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import { createPendingCheckoutOrder } from "../services/checkoutService.js";
-import { applyPhonePeResult } from "../services/orderPaymentService.js";
+import { applyPhonePeResult, applyPhonePeWebhookResult } from "../services/orderPaymentService.js";
 import { getPhonePeOrderStatus, initiatePhonePePayment, validatePhonePeCallback } from "../services/phonepeService.js";
 import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { getPhonePeClient, isPhonePeConfigured } from "../config/phonepe.js";
+import { getPhonePeClient, getPhonePeConfigurationStatus } from "../config/phonepe.js";
 
 function frontendUrl() {
   return String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -19,10 +20,19 @@ const checkoutCallbackTypes = new Set([
 ]);
 
 export function getPhonePeConfiguration(req, res) {
-  res.status(200).json({ success: true, enabled: isPhonePeConfigured() });
+  const { paymentConfigured, webhookConfigured } = getPhonePeConfigurationStatus();
+  res.status(200).json({ success: true, paymentConfigured, webhookConfigured });
 }
 
 export const createPhonePePayment = asyncHandler(async (req, res) => {
+  const configuration = getPhonePeConfigurationStatus();
+  console.log("[PhonePe] Initiating payment", {
+    environment: configuration.environment,
+    clientIdPresent: configuration.clientIdPresent,
+    clientSecretPresent: configuration.clientSecretPresent,
+    clientVersionPresent: configuration.clientVersionPresent,
+    paymentConfigured: configuration.paymentConfigured,
+  });
   getPhonePeClient();
   const order = await createPendingCheckoutOrder(req.body, req.user, "phonepe");
   order.phonepe = { merchantOrderId: `GP-${order._id.toString()}`, amount: order.amountInPaise, state: "PENDING" };
@@ -36,16 +46,21 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
     });
     order.phonepe.phonepeOrderId = response.orderId || "";
     order.phonepe.state = response.state || "PENDING";
+    if (!response.redirectUrl) throw new Error("PhonePe response did not include a redirect URL");
     await order.save();
+    console.log("[PhonePe] Payment initialization successful", { redirectUrlPresent: true });
     return res.status(201).json({ success: true, orderId: order._id.toString(), redirectUrl: response.redirectUrl });
   } catch (error) {
-    if (error instanceof ApiError) {
-      await Order.deleteOne({ _id: order._id, paymentStatus: "pending" });
-      throw error;
-    }
+    console.error("[PhonePe] Payment initialization failed", {
+      status: error?.status || error?.statusCode || error?.response?.status,
+      code: error?.code || error?.response?.data?.code,
+      message: error?.message,
+    });
+    order.paymentStatus = "failed";
+    order.failedAt = new Date();
     order.failureReason = "Unable to initiate PhonePe payment";
     await order.save();
-    throw new ApiError(502, "Unable to create PhonePe payment. Please try again.");
+    throw new ApiError(502, "Unable to start PhonePe payment. Please try again.");
   }
 });
 
@@ -80,11 +95,15 @@ export const getPhonePeStatus = asyncHandler(async (req, res) => {
 export const handlePhonePeWebhook = asyncHandler(async (req, res) => {
   const authorization = req.headers.authorization || "";
   const rawBody = typeof req.body === "string" ? req.body : "";
+  if (!authorization) return res.status(401).json({ success: false, message: "Invalid webhook authentication" });
+  if (!rawBody) return res.status(400).json({ success: false, message: "Invalid webhook body" });
+
   let callback;
   try {
     callback = validatePhonePeCallback(authorization, rawBody);
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof SyntaxError) return res.status(400).json({ success: false, message: "Invalid webhook body" });
     return res.status(401).json({ success: false, message: "Invalid webhook authentication" });
   }
   if (!checkoutCallbackTypes.has(String(callback?.type || ""))) {
@@ -97,6 +116,7 @@ export const handlePhonePeWebhook = asyncHandler(async (req, res) => {
   if (!order) return res.status(200).json({ received: true, ignored: true });
   if (process.env.PHONEPE_MERCHANT_ID && payload.merchantId && payload.merchantId !== process.env.PHONEPE_MERCHANT_ID) return res.status(400).json({ success: false, message: "Invalid webhook merchant reference" });
   if (Number.isFinite(payload.amount) && payload.amount !== order.amountInPaise) return res.status(400).json({ success: false, message: "Invalid webhook order amount" });
-  await applyPhonePeResult(order, payload);
-  return res.status(200).json({ received: true });
+  const eventKey = createHash("sha256").update(rawBody, "utf8").digest("hex");
+  const { processed } = await applyPhonePeWebhookResult(order, payload, eventKey);
+  return res.status(200).json({ received: true, duplicate: !processed });
 });

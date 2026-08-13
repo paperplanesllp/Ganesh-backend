@@ -37,3 +37,35 @@ export async function applyPhonePeResult(order, response) {
 
   return Order.findById(order._id);
 }
+
+export async function applyPhonePeWebhookResult(order, response, eventKey) {
+  const { phonePeUpdateFromResponse, mapPhonePeState } = await import("./phonepeService.js");
+  const phonepe = phonePeUpdateFromResponse(response);
+  const status = mapPhonePeState(phonepe.state);
+  const phonepeFields = Object.fromEntries(
+    Object.entries(phonepe).map(([key, value]) => [`phonepe.${key}`, value]),
+  );
+  const filter = {
+    _id: order._id,
+    paymentStatus: { $ne: "paid" },
+    webhookEvents: { $ne: eventKey },
+  };
+  const update = {
+    $set: {
+      ...phonepeFields,
+      failureReason: status === "failed"
+        ? (phonepe.detailedErrorCode || phonepe.errorCode || "Payment failed")
+        : "",
+      paymentStatus: status,
+      ...(status === "paid"
+        ? { orderStatus: "confirmed", paidAt: new Date(), failedAt: null }
+        : status === "failed"
+          ? { failedAt: order.failedAt || new Date() }
+          : {}),
+    },
+    $addToSet: { webhookEvents: eventKey },
+  };
+
+  const result = await Order.updateOne(filter, update);
+  return { processed: result.modifiedCount === 1 };
+}

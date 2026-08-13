@@ -19,6 +19,22 @@ const checkoutCallbackTypes = new Set([
   "CHECKOUT_ORDER_FAILED",
 ]);
 
+function safePhonePeErrorDetails(error) {
+  const details = error?.response?.data ?? error?.data ?? error?.details ?? error?.error;
+  if (details === undefined || details === null) return undefined;
+
+  const redact = (value, key = "") => {
+    if (/secret|authorization|token|password|jwt/i.test(key)) return "[REDACTED]";
+    if (Array.isArray(value)) return value.slice(0, 20).map((item) => redact(item));
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).slice(0, 30).map(([childKey, childValue]) => [childKey, redact(childValue, childKey)]));
+    }
+    return typeof value === "string" ? value.slice(0, 1000) : value;
+  };
+
+  return redact(details);
+}
+
 export function getPhonePeConfiguration(req, res) {
   const { paymentConfigured, webhookConfigured } = getPhonePeConfigurationStatus();
   res.status(200).json({ success: true, paymentConfigured, webhookConfigured });
@@ -55,6 +71,7 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
       status: error?.status || error?.statusCode || error?.response?.status,
       code: error?.code || error?.response?.data?.code,
       message: error?.message,
+      details: safePhonePeErrorDetails(error),
     });
     order.paymentStatus = "failed";
     order.failedAt = new Date();

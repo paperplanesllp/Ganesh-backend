@@ -36,8 +36,32 @@ function safePhonePeErrorDetails(error) {
 }
 
 export function getPhonePeConfiguration(req, res) {
-  const { paymentConfigured, webhookConfigured } = getPhonePeConfigurationStatus();
-  res.status(200).json({ success: true, paymentConfigured, webhookConfigured });
+  const {
+    configured,
+    paymentConfigured,
+    enabled,
+    environment,
+    environmentValid,
+    clientIdPresent,
+    clientSecretPresent,
+    clientVersionPresent,
+    clientVersionValid,
+    webhookConfigured,
+  } = getPhonePeConfigurationStatus();
+  res.set("Cache-Control", "no-store");
+  res.status(200).json({
+    success: true,
+    configured,
+    paymentConfigured,
+    enabled,
+    environment,
+    environmentValid,
+    clientIdPresent,
+    clientSecretPresent,
+    clientVersionPresent,
+    clientVersionValid,
+    webhookConfigured,
+  });
 }
 
 export const createPhonePePayment = asyncHandler(async (req, res) => {

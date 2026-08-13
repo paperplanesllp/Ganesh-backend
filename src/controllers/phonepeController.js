@@ -68,7 +68,9 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
     return res.status(201).json({ success: true, orderId: order._id.toString(), redirectUrl: response.redirectUrl });
   } catch (error) {
     console.error("[PhonePe] Payment initialization failed", {
-      status: error?.status || error?.statusCode || error?.response?.status,
+      name: error?.name,
+      type: error?.type,
+      httpStatusCode: error?.httpStatusCode ?? error?.statusCode ?? error?.status ?? error?.response?.status,
       code: error?.code || error?.response?.data?.code,
       message: error?.message,
       details: safePhonePeErrorDetails(error),

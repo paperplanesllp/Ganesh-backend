@@ -8,7 +8,6 @@ export function isPhonePeConfigured({ webhook = false } = {}) {
   const environment = String(process.env.PHONEPE_ENV || "SANDBOX").toUpperCase();
   const version = Number(process.env.PHONEPE_CLIENT_VERSION);
   const base = process.env.PHONEPE_ENABLED === "true"
-    && process.env.PHONEPE_MERCHANT_ID
     && process.env.PHONEPE_CLIENT_ID
     && process.env.PHONEPE_CLIENT_SECRET
     && Number.isInteger(version)

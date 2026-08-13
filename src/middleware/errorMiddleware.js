@@ -63,7 +63,10 @@ export const errorHandler = (error, req, res, next) => {
     response.errors = normalizedError.errors;
   }
 
-  if (statusCode >= 500 && process.env.NODE_ENV !== "production") {
+  // Keep internal details out of the HTTP response, but always record server
+  // failures. Production hosts such as Render otherwise only show the 500
+  // status, which makes database permission and configuration failures opaque.
+  if (statusCode >= 500) {
     console.error("[server:error]", {
       name: error?.name,
       message: error?.message,

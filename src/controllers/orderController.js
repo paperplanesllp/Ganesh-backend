@@ -7,8 +7,6 @@ function serializeOrder(order) {
   return {
     id: order._id.toString(),
     orderId: order._id.toString(),
-    razorpayOrderId: order.razorpayOrderId,
-    razorpayPaymentId: order.razorpayPaymentId,
     customerName: order.customerName,
     email: order.email,
     phone: order.phone,
@@ -18,7 +16,8 @@ function serializeOrder(order) {
     deliveryCharge: order.deliveryCharge,
     totalAmount: order.totalAmount,
     currency: order.currency,
-    paymentMethod: order.paymentMethod || "razorpay",
+    paymentMethod: "phonepe",
+    phonepe: order.phonepe,
     paymentStatus: order.paymentStatus,
     orderStatus: order.orderStatus,
     createdAt: order.createdAt,

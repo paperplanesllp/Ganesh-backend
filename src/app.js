@@ -5,10 +5,8 @@ import express from "express";
 import helmet from "helmet";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import { handleRazorpayWebhook } from "./controllers/paymentController.js";
 import { handlePhonePeWebhook } from "./controllers/phonepeController.js";
 import orderRoutes from "./routes/orderRoutes.js";
-import paymentRoutes from "./routes/paymentRoutes.js";
 import phonepeRoutes from "./routes/phonepeRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
@@ -16,31 +14,39 @@ import userRoutes from "./routes/userRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
-const allowedOrigins = [
+const defaultAllowedOrigins = [
+  "https://www.ganeshpickles.com",
+  "https://ganeshpickles.com",
   "http://localhost:5173",
+  "http://localhost:3000",
+];
+const configuredAllowedOrigins = [
   process.env.FRONTEND_URL,
+  ...(process.env.CORS_ALLOWED_ORIGINS || "").split(","),
 ]
   .filter(Boolean)
   .map((origin) => origin.trim().replace(/\/$/, ""));
+const allowedOrigins = new Set([...defaultAllowedOrigins, ...configuredAllowedOrigins]);
 const allowedMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
       return callback(null, true);
     }
 
-    console.error("Blocked CORS origin:", origin);
+    console.warn("[cors:rejected-origin]", { origin });
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
   methods: allowedMethods,
   allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+  maxAge: 86400,
 };
 
 app.use(helmet());
 app.use(cors(corsOptions));
-app.post("/api/payments/webhook", express.raw({ type: "application/json", limit: "100kb" }), handleRazorpayWebhook);
 app.post("/api/payments/phonepe/webhook", express.text({ type: "application/json", limit: "100kb" }), handlePhonePeWebhook);
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
@@ -56,7 +62,6 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/orders", orderRoutes);
-app.use("/api/payments", paymentRoutes);
 app.use("/api/payments/phonepe", phonepeRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/reviews", reviewRoutes);

@@ -3,6 +3,7 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import ApiError from "../utils/ApiError.js";
 import { normalizeEmail, normalizePhone } from "../utils/validators.js";
+import { calculateShippingCharge, getCanonicalIndianState } from "../utils/shipping.js";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const indianPinCodeRegex = /^\d{6}$/;
@@ -32,9 +33,11 @@ function validateCustomerAndShipping(body = {}) {
   if (!shippingAddress.addressLine1) errors.addressLine1 = "Address line 1 is required";
   if (!shippingAddress.city) errors.city = "City is required";
   if (!shippingAddress.district) errors.district = "District is required";
-  if (!shippingAddress.state) errors.state = "State is required";
+  const canonicalState = getCanonicalIndianState(shippingAddress.state);
+  if (!canonicalState) errors.state = "Select a valid Indian State or Union Territory";
   if (!indianPinCodeRegex.test(shippingAddress.pincode)) errors.pincode = "Enter a valid PIN code";
   if (Object.keys(errors).length) throw new ApiError(422, "Invalid checkout details", errors);
+  shippingAddress.state = canonicalState;
   return { customerName, email, phone, shippingAddress, notes: cleanString(body.notes, 500) };
 }
 
@@ -55,7 +58,6 @@ function validateCartItems(items) {
 async function buildOrderProducts(cartItems) {
   const products = await Product.find({ _id: { $in: [...new Set(cartItems.map((item) => item.productId))] }, isActive: true });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-  let deliveryCharge = 0;
   const orderedProducts = cartItems.map((item, index) => {
     const product = productMap.get(item.productId);
     if (!product) throw new ApiError(404, "Product not found", { [`items.${index}.productId`]: "Product was not found" });
@@ -65,18 +67,17 @@ async function buildOrderProducts(cartItems) {
     if (item.quantity > stock) throw new ApiError(422, "Insufficient stock", { [`items.${index}.quantity`]: `Only ${stock} item(s) available` });
     const itemPrice = Number(variant.price);
     if (!Number.isFinite(itemPrice) || itemPrice < 1) throw new ApiError(422, "Invalid product price");
-    const productDeliveryCharge = product.delivery?.type === "fixed" ? Math.max(0, Number(product.delivery.charge) || 0) : 0;
-    deliveryCharge = Math.max(deliveryCharge, productDeliveryCharge);
     return { product: product._id, productName: product.name, slug: product.slug, image: product.image, variantId: variant._id, variantLabel: variant.label, grams: variant.grams, quantity: item.quantity, itemPrice, itemTotal: itemPrice * item.quantity };
   });
-  return { orderedProducts, deliveryCharge };
+  return orderedProducts;
 }
 
 export async function createPendingCheckoutOrder(body, user, paymentMethod) {
   const cartItems = validateCartItems(body.items || body.cartItems);
   const checkoutDetails = validateCustomerAndShipping(body);
-  const { orderedProducts, deliveryCharge } = await buildOrderProducts(cartItems);
+  const orderedProducts = await buildOrderProducts(cartItems);
   const subtotal = orderedProducts.reduce((sum, item) => sum + item.itemTotal, 0);
+  const deliveryCharge = calculateShippingCharge(checkoutDetails.shippingAddress.state);
   const totalAmount = subtotal + deliveryCharge;
   const amountInPaise = Math.round(totalAmount * 100);
   if (!Number.isInteger(amountInPaise) || amountInPaise < 100) throw new ApiError(422, "Invalid order amount");

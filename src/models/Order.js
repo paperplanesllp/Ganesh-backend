@@ -184,22 +184,9 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["razorpay", "phonepe"],
-      default: "razorpay",
+      enum: ["phonepe"],
+      default: "phonepe",
       index: true,
-    },
-    razorpayOrderId: {
-      type: String,
-      trim: true,
-    },
-    razorpayPaymentId: {
-      type: String,
-      trim: true,
-    },
-    razorpaySignature: {
-      type: String,
-      default: null,
-      trim: true,
     },
     phonepe: {
       merchantOrderId: { type: String, trim: true },
@@ -247,8 +234,6 @@ const orderSchema = new mongoose.Schema(
   },
 );
 
-orderSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });
-orderSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ "phonepe.merchantOrderId": 1 }, { unique: true, sparse: true });
 orderSchema.index({ user: 1, createdAt: -1 });
 

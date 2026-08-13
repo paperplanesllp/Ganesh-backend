@@ -66,7 +66,15 @@ export const getPhonePeStatus = asyncHandler(async (req, res) => {
   if (process.env.PHONEPE_MERCHANT_ID && response.merchantId && response.merchantId !== process.env.PHONEPE_MERCHANT_ID) throw new ApiError(502, "PhonePe returned an invalid merchant reference");
   if (Number.isFinite(response.amount) && response.amount !== order.amountInPaise) throw new ApiError(502, "PhonePe returned an invalid order amount");
   const updated = await applyPhonePeResult(order, response);
-  res.status(200).json({ success: true, orderId: updated._id.toString(), paymentStatus: updated.paymentStatus, state: updated.phonepe?.state || "PENDING" });
+  res.status(200).json({
+    success: true,
+    orderId: updated._id.toString(),
+    paymentStatus: updated.paymentStatus,
+    state: updated.phonepe?.state || "PENDING",
+    subtotal: updated.subtotal,
+    deliveryCharge: updated.deliveryCharge,
+    totalAmount: updated.totalAmount,
+  });
 });
 
 export const handlePhonePeWebhook = asyncHandler(async (req, res) => {

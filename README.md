@@ -392,7 +392,7 @@ Auth requests must use `credentials: "include"` so the browser sends the HTTP-on
 - Product catalog API backed by MongoDB
 - Cart persistence for signed-in users
 - Checkout and order models
-- Razorpay order creation and payment verification
+- PhonePe Standard Checkout order creation and payment verification
 - Customer order history
 - Admin product, inventory, and order management
 - Email/SMS notifications

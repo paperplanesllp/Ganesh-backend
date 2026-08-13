@@ -14,6 +14,8 @@ import userRoutes from "./routes/userRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
+app.set("trust proxy", 1);
+
 const defaultAllowedOrigins = [
   "https://www.ganeshpickles.com",
   "https://ganeshpickles.com",

@@ -2,6 +2,7 @@ import "dotenv/config";
 import mongoose from "mongoose";
 import app from "./app.js";
 import connectDB from "./config/db.js";
+import { getPhonePeConfigurationStatus } from "./config/phonepe.js";
 
 const requiredEnv = ["MONGODB_URI", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 const port = process.env.PORT || 5000;
@@ -18,6 +19,7 @@ function validateEnvironment() {
 async function startServer() {
   try {
     validateEnvironment();
+    console.log("[PhonePe config]", getPhonePeConfigurationStatus());
     await connectDB();
 
     server = app.listen(port, () => {

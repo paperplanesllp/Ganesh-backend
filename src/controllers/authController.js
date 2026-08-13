@@ -112,11 +112,27 @@ export const login = asyncHandler(async (req, res) => {
 export const refresh = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
+  console.info("[auth:refresh]", {
+    cookiePresent: Boolean(refreshToken),
+    refreshSecretConfigured: Boolean(process.env.JWT_REFRESH_SECRET),
+  });
+
   if (!refreshToken) {
     throw new ApiError(401, "Refresh token is required");
   }
 
-  const payload = verifyRefreshToken(refreshToken);
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch (error) {
+    console.warn("[auth:refresh]", {
+      cookiePresent: true,
+      verificationFailed: true,
+      reason: error?.name || "TokenVerificationError",
+    });
+    clearRefreshTokenCookie(res);
+    throw error;
+  }
 
   if (payload.tokenType !== "refresh") {
     throw new ApiError(401, "Invalid token");

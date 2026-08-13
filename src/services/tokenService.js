@@ -49,17 +49,25 @@ export function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+function isCrossSiteProduction() {
+  const frontendUrl = process.env.FRONTEND_URL || "";
+
+  return process.env.NODE_ENV === "production"
+    || process.env.RENDER === "true"
+    || frontendUrl.startsWith("https://");
+}
+
 function refreshCookieOptions() {
   const days = Number.parseInt(process.env.REFRESH_COOKIE_DAYS || "7", 10);
   const maxAgeDays = Number.isFinite(days) && days > 0 ? days : 7;
-  const isProduction = process.env.NODE_ENV === "production";
+  const requiresCrossSiteCookie = isCrossSiteProduction();
 
   return {
     httpOnly: true,
-    secure: isProduction,
+    secure: requiresCrossSiteCookie,
     // The production frontend and Render API are cross-site, so browsers
     // require SameSite=None together with Secure for the refresh cookie.
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: requiresCrossSiteCookie ? "none" : "lax",
     path: "/api/auth",
     maxAge: maxAgeDays * 24 * 60 * 60 * 1000,
   };

@@ -3,7 +3,7 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import ApiError from "../utils/ApiError.js";
 import { normalizeEmail, normalizePhone } from "../utils/validators.js";
-import { calculateShippingCharge, getCanonicalIndianState } from "../utils/shipping.js";
+import { calculateShippingCharge, calculateTotalCartWeightKg, getCanonicalIndianState } from "../utils/shipping.js";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const indianPinCodeRegex = /^\d{6}$/;
@@ -67,7 +67,9 @@ async function buildOrderProducts(cartItems) {
     if (item.quantity > stock) throw new ApiError(422, "Insufficient stock", { [`items.${index}.quantity`]: `Only ${stock} item(s) available` });
     const itemPrice = Number(variant.price);
     if (!Number.isFinite(itemPrice) || itemPrice < 1) throw new ApiError(422, "Invalid product price");
-    return { product: product._id, productName: product.name, slug: product.slug, image: product.image, variantId: variant._id, variantLabel: variant.label, grams: variant.grams, quantity: item.quantity, itemPrice, itemTotal: itemPrice * item.quantity };
+    const grams = Number(variant.grams);
+    if (!Number.isFinite(grams) || grams <= 0) throw new ApiError(422, "Invalid product weight");
+    return { product: product._id, productName: product.name, slug: product.slug, image: product.image, variantId: variant._id, variantLabel: variant.label, grams, quantity: item.quantity, itemPrice, itemTotal: itemPrice * item.quantity };
   });
   return orderedProducts;
 }
@@ -77,7 +79,8 @@ export async function createPendingCheckoutOrder(body, user, paymentMethod) {
   const checkoutDetails = validateCustomerAndShipping(body);
   const orderedProducts = await buildOrderProducts(cartItems);
   const subtotal = orderedProducts.reduce((sum, item) => sum + item.itemTotal, 0);
-  const deliveryCharge = calculateShippingCharge(checkoutDetails.shippingAddress.state);
+  const totalWeightKg = calculateTotalCartWeightKg(orderedProducts);
+  const deliveryCharge = calculateShippingCharge(checkoutDetails.shippingAddress.state, totalWeightKg);
   const totalAmount = subtotal + deliveryCharge;
   const amountInPaise = Math.round(totalAmount * 100);
   if (!Number.isInteger(amountInPaise) || amountInPaise < 100) throw new ApiError(422, "Invalid order amount");

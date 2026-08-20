@@ -28,8 +28,23 @@ export function getCanonicalIndianState(value) {
   return canonicalStates.get(normalizeState(value)) || "";
 }
 
-export function calculateShippingCharge(state) {
+export function calculateTotalCartWeightKg(items = []) {
+  const totalWeightGrams = items.reduce((total, item) => {
+    const grams = Number(item?.grams);
+    const quantity = Number(item?.quantity);
+    if (!Number.isFinite(grams) || grams <= 0 || !Number.isInteger(quantity) || quantity <= 0) return total;
+    return total + grams * quantity;
+  }, 0);
+
+  return totalWeightGrams / 1000;
+}
+
+export function calculateShippingCharge(state, totalWeightKg) {
   const canonicalState = getCanonicalIndianState(state);
   if (!canonicalState) return null;
-  return southIndiaStateKeys.has(normalizeState(canonicalState)) ? 60 : 90;
+  const weight = Number(totalWeightKg);
+  if (!Number.isFinite(weight) || weight <= 0) return 0;
+  const chargeableKg = Math.ceil(weight);
+  const ratePerKg = southIndiaStateKeys.has(normalizeState(canonicalState)) ? 60 : 90;
+  return chargeableKg * ratePerKg;
 }

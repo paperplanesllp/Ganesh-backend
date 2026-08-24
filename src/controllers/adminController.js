@@ -3,6 +3,8 @@ import Order, { orderStatuses } from "../models/Order.js";
 import Product from "../models/Product.js";
 import Review from "../models/Review.js";
 import User from "../models/User.js";
+import CategoryVisibility, { managedCategoryNames } from "../models/CategoryVisibility.js";
+import { getManagedCategoryVisibility } from "../utils/categoryVisibility.js";
 import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
@@ -71,6 +73,24 @@ export const getDashboard = asyncHandler(async (req, res) => {
       pendingReviews,
     },
   });
+});
+
+export const getCategoryVisibility = asyncHandler(async (req, res) => {
+  res.status(200).json({ success: true, categories: await getManagedCategoryVisibility() });
+});
+
+export const updateCategoryVisibility = asyncHandler(async (req, res) => {
+  const name = req.params.name;
+  if (!managedCategoryNames.includes(name) || typeof req.body.isVisible !== "boolean") {
+    throw new ApiError(422, "Invalid category visibility update");
+  }
+
+  const category = await CategoryVisibility.findOneAndUpdate(
+    { name },
+    { isVisible: req.body.isVisible },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  ).lean();
+  res.status(200).json({ success: true, message: `${name} visibility updated`, category: { name: category.name, isVisible: category.isVisible } });
 });
 
 export const listUsers = asyncHandler(async (req, res) => {

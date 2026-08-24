@@ -2,6 +2,7 @@ import express from "express";
 import {
   getOrder,
   getDashboard,
+  getCategoryVisibility,
   getUser,
   deleteReview,
   listAdminProducts,
@@ -9,6 +10,7 @@ import {
   listReviews,
   listUsers,
   updateOrderStatus,
+  updateCategoryVisibility,
   updateReviewStatus,
 } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
@@ -17,6 +19,8 @@ const router = express.Router();
 
 router.use(protect, requireRole("admin"));
 router.get("/dashboard", getDashboard);
+router.get("/categories", getCategoryVisibility);
+router.patch("/categories/:name", updateCategoryVisibility);
 router.get("/products", listAdminProducts);
 router.get("/users", listUsers);
 router.get("/users/:userId", getUser);

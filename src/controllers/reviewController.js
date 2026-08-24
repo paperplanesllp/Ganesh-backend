@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { getHiddenCategoryNames, isCategoryVisible } from "../utils/categoryVisibility.js";
 
 function serializeReview(review) {
   return {
@@ -50,7 +51,11 @@ async function updateProductReviewMeta(productId) {
 }
 
 export const getReviews = asyncHandler(async (req, res) => {
-  const reviews = await Review.find({ status: "approved" })
+  const hiddenCategories = await getHiddenCategoryNames();
+  const visibleProductIds = hiddenCategories.length > 0
+    ? await Product.find({ category: { $not: { $in: hiddenCategories.map((category) => new RegExp(`^${category}$`, "i")) } } }).distinct("_id")
+    : null;
+  const reviews = await Review.find({ status: "approved", ...(visibleProductIds ? { product: { $in: visibleProductIds } } : {}) })
     .sort({ createdAt: -1 })
     .populate({ path: "user", select: "fullName" })
     .populate({ path: "product", select: "name" })
@@ -72,6 +77,9 @@ export const getReviewsByProduct = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(productId)) {
     throw new ApiError(400, "Invalid product ID");
   }
+
+  const product = await Product.findById(productId).select("category").lean();
+  if (!product || !(await isCategoryVisible(product.category))) throw new ApiError(404, "Product not found");
 
   const reviews = await Review.find({ product: productId, status: "approved" })
     .sort({ createdAt: -1 })

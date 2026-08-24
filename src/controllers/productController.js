@@ -4,6 +4,7 @@ import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import cloudinary, { getCloudinaryConfig } from "../config/cloudinary.js";
 import Product, { spiceLevels } from "../models/Product.js";
+import { getHiddenCategoryNames, getManagedCategoryVisibility, isCategoryVisible } from "../utils/categoryVisibility.js";
 import { createUniqueSlug } from "../utils/createSlug.js";
 import { applyMediaCompatibility, getCloudinaryPublicIds } from "../utils/mediaHelpers.js";
 
@@ -183,9 +184,16 @@ function computedStages({ publicProduct = true } = {}) {
   ];
 }
 
-function buildPublicMatch(query) {
+async function buildPublicMatch(query) {
   const match = { isActive: true };
   const andConditions = [];
+
+  const hiddenCategories = await getHiddenCategoryNames();
+  if (hiddenCategories.length > 0) {
+    andConditions.push({
+      $nor: hiddenCategories.map((category) => ({ category: new RegExp(`^${escapeRegex(category)}$`, "i") })),
+    });
+  }
 
   if (query.search) {
     const safe = escapeRegex(query.search.trim());
@@ -241,13 +249,15 @@ function buildPublicMatch(query) {
 }
 
 async function getFilterOptions() {
-  const [categories, flavours] = await Promise.all([
+  const [hiddenCategories, categories, flavours] = await Promise.all([
+    getHiddenCategoryNames(),
     Product.distinct("category", { isActive: true }),
     Product.distinct("flavour", { isActive: true }),
   ]);
+  const hidden = new Set(hiddenCategories.map((category) => category.toLowerCase()));
 
   return {
-    categories: categories.sort((a, b) => a.localeCompare(b)),
+    categories: categories.filter((category) => !hidden.has(category.toLowerCase())).sort((a, b) => a.localeCompare(b)),
     flavours: flavours.sort((a, b) => a.localeCompare(b)),
     spiceLevels,
   };
@@ -270,7 +280,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   const page = parsePositiveInt(req.query.page, 1, 100000);
   const limit = parsePositiveInt(req.query.limit, 12, 50);
   const sort = allowedSorts.has(req.query.sort) ? req.query.sort : "featured";
-  const match = buildPublicMatch(req.query);
+  const match = await buildPublicMatch(req.query);
   const skip = (page - 1) * limit;
 
   const pipeline = [
@@ -304,9 +314,21 @@ export const getProducts = asyncHandler(async (req, res) => {
   });
 });
 
+export const getPublicCategoryVisibility = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    categories: await getManagedCategoryVisibility(),
+  });
+});
+
 async function getProductCollection(req, res, filter, defaultLimit = 8, maxLimit = 12) {
   const limit = parsePositiveInt(req.query.limit, defaultLimit, maxLimit);
-  const products = await Product.find({ isActive: true, ...filter })
+  const hiddenCategories = await getHiddenCategoryNames();
+  const products = await Product.find({
+    isActive: true,
+    ...filter,
+    ...(hiddenCategories.length > 0 ? { category: { $not: { $in: hiddenCategories.map((category) => new RegExp(`^${escapeRegex(category)}$`, "i")) } } } : {}),
+  })
     .sort({ featured: -1, bestseller: -1, reviewCount: -1, createdAt: -1 })
     .limit(limit);
 
@@ -322,7 +344,7 @@ export const getNewArrivalProducts = asyncHandler((req, res) => getProductCollec
 
 export const getProductBySlug = asyncHandler(async (req, res) => {
   const product = await Product.findOne({ slug: req.params.slug, isActive: true });
-  if (!product) throw new ApiError(404, "Product not found");
+  if (!product || !(await isCategoryVisible(product.category))) throw new ApiError(404, "Product not found");
 
   res.status(200).json({
     success: true,
@@ -334,7 +356,7 @@ export const getProductById = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw new ApiError(400, "Invalid product ID");
 
   const product = await Product.findOne({ _id: req.params.id, isActive: true });
-  if (!product) throw new ApiError(404, "Product not found");
+  if (!product || !(await isCategoryVisible(product.category))) throw new ApiError(404, "Product not found");
 
   res.status(200).json({
     success: true,

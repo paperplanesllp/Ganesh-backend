@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import ApiError from "../utils/ApiError.js";
 import { normalizeEmail, normalizePhone } from "../utils/validators.js";
 import { calculateShippingCharge, calculateTotalCartWeightKg, getCanonicalIndianState } from "../utils/shipping.js";
+import { getHiddenCategoryNames } from "../utils/categoryVisibility.js";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const indianPinCodeRegex = /^\d{6}$/;
@@ -56,7 +57,12 @@ function validateCartItems(items) {
 }
 
 async function buildOrderProducts(cartItems) {
-  const products = await Product.find({ _id: { $in: [...new Set(cartItems.map((item) => item.productId))] }, isActive: true });
+  const hiddenCategories = await getHiddenCategoryNames();
+  const products = await Product.find({
+    _id: { $in: [...new Set(cartItems.map((item) => item.productId))] },
+    isActive: true,
+    ...(hiddenCategories.length > 0 ? { category: { $not: { $in: hiddenCategories.map((category) => new RegExp(`^${category}$`, "i")) } } } : {}),
+  });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const orderedProducts = cartItems.map((item, index) => {
     const product = productMap.get(item.productId);

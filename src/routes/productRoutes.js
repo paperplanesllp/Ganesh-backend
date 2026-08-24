@@ -8,6 +8,7 @@ import {
   getFeaturedProducts,
   getNewArrivalProducts,
   getProductById,
+  getPublicCategoryVisibility,
   getProductBySlug,
   getProducts,
   updateProduct,
@@ -26,6 +27,7 @@ const router = express.Router();
 router.get("/featured", getFeaturedProducts);
 router.get("/bestsellers", getBestsellerProducts);
 router.get("/new-arrivals", getNewArrivalProducts);
+router.get("/categories", getPublicCategoryVisibility);
 router.get("/admin/all", protect, requireRole("admin"), getAdminProducts);
 router.get("/admin/:id", protect, requireRole("admin"), getAdminProductById);
 router.get("/slug/:slug", getProductBySlug);

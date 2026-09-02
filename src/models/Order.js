@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const paymentStatuses = ["pending", "paid", "failed", "refunded"];
-const orderStatuses = ["pending", "confirmed", "cancelled", "fulfilled"];
+const orderStatuses = ["pending", "confirmed", "dispatched", "fulfilled", "cancelled"];
 
 const orderedProductSchema = new mongoose.Schema(
   {

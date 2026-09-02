@@ -118,7 +118,12 @@ export const getUser = asyncHandler(async (req, res) => {
 export const listOrders = asyncHandler(async (req, res) => {
   const { page, limit, skip } = pagination(req.query);
   const filter = {};
-  if (orderStatuses.includes(req.query.status)) filter.orderStatus = req.query.status;
+  if (req.query.status === "pending-dispatch") {
+    filter.paymentStatus = "paid";
+    filter.orderStatus = "confirmed";
+  } else if (orderStatuses.includes(req.query.status)) {
+    filter.orderStatus = req.query.status;
+  }
   const [orders, total] = await Promise.all([
     Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Order.countDocuments(filter),

@@ -8,8 +8,23 @@ import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { getPhonePeClient, getPhonePeConfigurationStatus } from "../config/phonepe.js";
 
-function frontendUrl() {
-  return String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+function phonePeRedirectBaseUrl() {
+  const configuredFrontendUrl = String(process.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
+
+  let url;
+  try {
+    url = new URL(configuredFrontendUrl);
+  } catch {
+    throw new ApiError(503, "PhonePe payment is currently unavailable.");
+  }
+
+  // PhonePe must return to a publicly reachable HTTPS URL. Do not silently use
+  // a localhost fallback in a deployed service, as PhonePe rejects that URL.
+  if (url.protocol !== "https:" || ["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+    throw new ApiError(503, "PhonePe payment is currently unavailable.");
+  }
+
+  return `${url.toString().replace(/\/$/, "")}/payment/phonepe/status`;
 }
 
 const checkoutCallbackTypes = new Set([
@@ -33,6 +48,31 @@ function safePhonePeErrorDetails(error) {
   };
 
   return redact(details);
+}
+
+function logPhonePeError(operation, error, merchantOrderId) {
+  console.error(`[PhonePe] ${operation} failed`, {
+    merchantOrderId,
+    name: error?.name,
+    type: error?.type,
+    httpStatusCode: error?.httpStatusCode ?? error?.statusCode ?? error?.status ?? error?.response?.status,
+    code: error?.code || error?.response?.data?.code,
+    message: error?.message,
+    details: safePhonePeErrorDetails(error),
+  });
+}
+
+function phonePeApiError(error, fallbackMessage) {
+  if (error instanceof ApiError) return error;
+
+  const statusCode = Number(error?.httpStatusCode ?? error?.statusCode ?? error?.status ?? error?.response?.status);
+  // PhonePe's 4xx responses are request/authentication errors, not gateway
+  // failures. Preserve their status and safe message for the caller.
+  if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {
+    return new ApiError(statusCode, error?.message || fallbackMessage);
+  }
+
+  return new ApiError(502, fallbackMessage);
 }
 
 export function getPhonePeConfiguration(req, res) {
@@ -74,6 +114,7 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
     paymentConfigured: configuration.paymentConfigured,
   });
   getPhonePeClient();
+  const redirectBaseUrl = phonePeRedirectBaseUrl();
   const order = await createPendingCheckoutOrder(req.body, req.user, "phonepe");
   order.phonepe = { merchantOrderId: `GP-${order._id.toString()}`, amount: order.amountInPaise, state: "PENDING" };
   await order.save();
@@ -82,7 +123,7 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
     const response = await initiatePhonePePayment({
       merchantOrderId: order.phonepe.merchantOrderId,
       amount: order.amountInPaise,
-      redirectUrl: `${frontendUrl()}/payment/phonepe/status?orderId=${order._id.toString()}`,
+      redirectUrl: `${redirectBaseUrl}?orderId=${encodeURIComponent(order._id.toString())}`,
     });
     order.phonepe.phonepeOrderId = response.orderId || "";
     order.phonepe.state = response.state || "PENDING";
@@ -91,19 +132,12 @@ export const createPhonePePayment = asyncHandler(async (req, res) => {
     console.log("[PhonePe] Payment initialization successful", { redirectUrlPresent: true });
     return res.status(201).json({ success: true, orderId: order._id.toString(), redirectUrl: response.redirectUrl });
   } catch (error) {
-    console.error("[PhonePe] Payment initialization failed", {
-      name: error?.name,
-      type: error?.type,
-      httpStatusCode: error?.httpStatusCode ?? error?.statusCode ?? error?.status ?? error?.response?.status,
-      code: error?.code || error?.response?.data?.code,
-      message: error?.message,
-      details: safePhonePeErrorDetails(error),
-    });
+    logPhonePeError("Payment initialization", error, order.phonepe.merchantOrderId);
     order.paymentStatus = "failed";
     order.failedAt = new Date();
     order.failureReason = "Unable to initiate PhonePe payment";
     await order.save();
-    throw new ApiError(502, "Unable to start PhonePe payment. Please try again.");
+    throw phonePeApiError(error, "Unable to start PhonePe payment. Please try again.");
   }
 });
 
@@ -117,8 +151,8 @@ export const getPhonePeStatus = asyncHandler(async (req, res) => {
   try {
     response = await getPhonePeOrderStatus(order.phonepe.merchantOrderId);
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(502, "Unable to confirm PhonePe payment status. Please try again.");
+    logPhonePeError("Payment status check", error, order.phonepe.merchantOrderId);
+    throw phonePeApiError(error, "Unable to confirm PhonePe payment status. Please try again.");
   }
   if (response.merchantOrderId && response.merchantOrderId !== order.phonepe.merchantOrderId) throw new ApiError(502, "PhonePe returned an invalid order reference");
   if (process.env.PHONEPE_MERCHANT_ID && response.merchantId && response.merchantId !== process.env.PHONEPE_MERCHANT_ID) throw new ApiError(502, "PhonePe returned an invalid merchant reference");

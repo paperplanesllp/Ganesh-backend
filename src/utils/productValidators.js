@@ -211,15 +211,15 @@ function validateVariants(errors, body, values, { required }) {
     }
 
     const sku = trimString(variant.sku).toUpperCase();
-    if (!sku) {
-      addError(errors, `variants.${index}.sku`, "Variant SKU is required");
-    } else if (sku.length > 60) {
-      addError(errors, `variants.${index}.sku`, "Variant SKU is too long");
-    } else if (seenSkus.has(sku)) {
-      addError(errors, `variants.${index}.sku`, "Duplicate SKUs are not allowed");
-    } else {
-      cleaned.sku = sku;
-      seenSkus.add(sku);
+    if (sku) {
+      if (sku.length > 60) {
+        addError(errors, `variants.${index}.sku`, "Variant SKU is too long");
+      } else if (seenSkus.has(sku)) {
+        addError(errors, `variants.${index}.sku`, "Duplicate SKUs are not allowed");
+      } else {
+        cleaned.sku = sku;
+        seenSkus.add(sku);
+      }
     }
 
     cleaned.isActive = variant.isActive === undefined ? true : Boolean(variant.isActive);

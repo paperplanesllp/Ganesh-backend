@@ -264,7 +264,9 @@ async function getFilterOptions() {
 }
 
 async function assertUniqueSkus(variants, excludeProductId = null) {
-  const skus = variants.map((variant) => variant.sku);
+  const skus = [...new Set(variants.map((variant) => String(variant?.sku || "").trim().toUpperCase()).filter(Boolean))];
+  if (skus.length === 0) return;
+
   const query = {
     "variants.sku": { $in: skus },
     ...(excludeProductId ? { _id: { $ne: excludeProductId } } : {}),

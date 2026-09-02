@@ -50,9 +50,9 @@ const variantSchema = new mongoose.Schema(
     },
     sku: {
       type: String,
-      required: [true, "Variant SKU is required"],
       uppercase: true,
       trim: true,
+      default: "",
     },
     isActive: {
       type: Boolean,

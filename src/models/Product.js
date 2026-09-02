@@ -240,15 +240,15 @@ productSchema.path("media").validate(function validatePrimaryMedia(media) {
   return media.filter((item) => item.isPrimary).length === 1;
 }, "Exactly one product image must be primary");
 
-productSchema.pre("validate", function normalizeMediaBeforeValidate(next) {
+// Mongoose 9 runs document middleware without the legacy callback argument.
+// Keeping this synchronous hook also lets validation errors propagate normally.
+productSchema.pre("validate", function normalizeMediaBeforeValidate() {
   if (this.media?.length) {
     this.media = normalizeMediaItems(this.media);
     const primary = this.media.find((item) => item.isPrimary) || this.media[0];
     this.image = primary.url;
     this.images = this.media.map((item) => item.url);
   }
-
-  next();
 });
 
 productSchema.virtual("startingPrice").get(function getStartingPrice() {

@@ -38,6 +38,10 @@ const orderedProductSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    freeShipping: {
+      type: Boolean,
+      default: false,
+    },
     quantity: {
       type: Number,
       required: true,

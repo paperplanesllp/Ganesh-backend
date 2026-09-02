@@ -4,7 +4,7 @@ import { createSlug } from "./createSlug.js";
 import { isAcceptedCloudinaryUrl, isAcceptedProductImageUrl, isTrustedLocalProductImage, normalizeMediaItems } from "./mediaHelpers.js";
 
 const stringArrayFields = ["images", "highlights", "usageSuggestions"];
-const booleanFields = ["featured", "bestseller", "newArrival", "isActive"];
+const booleanFields = ["featured", "bestseller", "newArrival", "isActive", "freeShipping"];
 const allowedProductFields = new Set([
   "name",
   "slug",
@@ -23,6 +23,7 @@ const allowedProductFields = new Set([
   "bestseller",
   "newArrival",
   "isActive",
+  "freeShipping",
   "rating",
   "reviewCount",
   "variants",

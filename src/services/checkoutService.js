@@ -75,7 +75,7 @@ async function buildOrderProducts(cartItems) {
     if (!Number.isFinite(itemPrice) || itemPrice < 1) throw new ApiError(422, "Invalid product price");
     const grams = Number(variant.grams);
     if (!Number.isFinite(grams) || grams <= 0) throw new ApiError(422, "Invalid product weight");
-    return { product: product._id, productName: product.name, slug: product.slug, image: product.image, variantId: variant._id, variantLabel: variant.label, grams, quantity: item.quantity, itemPrice, itemTotal: itemPrice * item.quantity };
+    return { product: product._id, productName: product.name, slug: product.slug, image: product.image, variantId: variant._id, variantLabel: variant.label, grams, freeShipping: product.freeShipping === true, quantity: item.quantity, itemPrice, itemTotal: itemPrice * item.quantity };
   });
   return orderedProducts;
 }
@@ -85,7 +85,7 @@ export async function createPendingCheckoutOrder(body, user, paymentMethod) {
   const checkoutDetails = validateCustomerAndShipping(body);
   const orderedProducts = await buildOrderProducts(cartItems);
   const subtotal = orderedProducts.reduce((sum, item) => sum + item.itemTotal, 0);
-  const totalWeightKg = calculateTotalCartWeightKg(orderedProducts);
+  const totalWeightKg = calculateTotalCartWeightKg(orderedProducts.filter((item) => !item.freeShipping));
   const deliveryCharge = calculateShippingCharge(checkoutDetails.shippingAddress.state, totalWeightKg);
   const totalAmount = subtotal + deliveryCharge;
   const amountInPaise = Math.round(totalAmount * 100);

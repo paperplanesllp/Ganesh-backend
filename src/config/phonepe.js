@@ -23,6 +23,7 @@ export function getPhonePeConfigurationStatus({ webhook = false } = {}) {
   const clientIdPresent = Boolean(normalizedCredential("PHONEPE_CLIENT_ID"));
   const clientSecretPresent = Boolean(normalizedCredential("PHONEPE_CLIENT_SECRET"));
   const versionValue = normalizedCredential("PHONEPE_CLIENT_VERSION");
+  const clientVersion = versionValue ? Number(versionValue) : undefined;
   const version = Number(versionValue);
   const clientVersionValid = Number.isInteger(version) && version > 0;
   const environmentValid = ["SANDBOX", "PRODUCTION"].includes(environment);
@@ -43,6 +44,7 @@ export function getPhonePeConfigurationStatus({ webhook = false } = {}) {
     environmentValid,
     clientIdPresent,
     clientSecretPresent,
+    clientVersion: Number.isInteger(clientVersion) && clientVersion > 0 ? clientVersion : undefined,
     clientVersionPresent: Boolean(versionValue),
     clientVersionValid,
     webhookConfigured,
@@ -55,12 +57,21 @@ export function isPhonePeConfigured({ webhook = false } = {}) {
 
 export function getPhonePeClient({ webhook = false } = {}) {
   if (!isPhonePeConfigured({ webhook })) throw new ApiError(503, "PhonePe payment is currently unavailable.");
+
   const clientId = normalizedCredential("PHONEPE_CLIENT_ID");
   const clientSecret = normalizedCredential("PHONEPE_CLIENT_SECRET");
   const version = Number(normalizedCredential("PHONEPE_CLIENT_VERSION"));
   if (!Number.isInteger(version) || version < 1) throw new ApiError(503, "PhonePe payment is currently unavailable.");
+
   const environmentName = normalizedEnvironmentValue();
-  const environment = environmentName === "SANDBOX" ? Env.SANDBOX : Env.PRODUCTION;
+  const environment = environmentName === "SANDBOX"
+    ? Env.SANDBOX
+    : environmentName === "PRODUCTION"
+      ? Env.PRODUCTION
+      : (() => {
+        throw new ApiError(503, "PhonePe payment is currently unavailable.");
+      })();
+
   const key = `${clientId}:${clientSecret}:${version}:${environment}`;
   if (!client || clientKey !== key) {
     client = StandardCheckoutClient.getInstance(clientId, clientSecret, version, environment);

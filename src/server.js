@@ -19,7 +19,14 @@ function validateEnvironment() {
 async function startServer() {
   try {
     validateEnvironment();
-    console.log("[PhonePe config]", getPhonePeConfigurationStatus());
+    const phonePeConfig = getPhonePeConfigurationStatus();
+    console.log("[PhonePe] Configuration", {
+      enabled: phonePeConfig.enabled,
+      environment: phonePeConfig.environment,
+      clientIdPresent: phonePeConfig.clientIdPresent,
+      clientSecretPresent: phonePeConfig.clientSecretPresent,
+      clientVersion: phonePeConfig.clientVersion,
+    });
     await connectDB();
 
     server = app.listen(port, () => {

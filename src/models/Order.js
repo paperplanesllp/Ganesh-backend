@@ -232,6 +232,18 @@ const orderSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Order confirmation emails (customer + store owner). queuedAt is set when the
+    // order becomes paid; orders without it are never emailed automatically.
+    notifications: {
+      queuedAt: { type: Date, default: null },
+      customerEmailSentAt: { type: Date, default: null },
+      storeEmailSentAt: { type: Date, default: null },
+      attempts: { type: Number, default: 0, min: 0 },
+      resendCount: { type: Number, default: 0, min: 0 },
+      lastAttemptAt: { type: Date, default: null },
+      lastError: { type: String, default: "", trim: true, maxlength: 500 },
+      lockedUntil: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,
@@ -240,6 +252,7 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ "phonepe.merchantOrderId": 1 }, { unique: true, sparse: true });
 orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, "notifications.queuedAt": 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 

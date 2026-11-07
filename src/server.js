@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import app from "./app.js";
 import connectDB from "./config/db.js";
 import { getPhonePeConfigurationStatus } from "./config/phonepe.js";
+import { getEmailConfig } from "./services/emailService.js";
+import { startOrderNotificationWorker, stopOrderNotificationWorker } from "./services/orderNotificationService.js";
 
 const requiredEnv = ["MONGODB_URI", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 const port = process.env.PORT || 5000;
@@ -27,7 +29,14 @@ async function startServer() {
       clientSecretPresent: phonePeConfig.clientSecretPresent,
       clientVersion: phonePeConfig.clientVersion,
     });
+    const emailConfig = getEmailConfig();
+    console.log("[email] Configuration", {
+      provider: emailConfig.provider || "not set",
+      configured: emailConfig.configured,
+      missing: emailConfig.missing,
+    });
     await connectDB();
+    startOrderNotificationWorker();
 
     server = app.listen(port, () => {
       console.log(`Ganesh Pickles API listening on port ${port}`);
@@ -39,6 +48,7 @@ async function startServer() {
 }
 
 function shutdown(exitCode = 0) {
+  stopOrderNotificationWorker();
   const closeDatabase = async () => {
     await mongoose.connection.close(false);
     process.exit(exitCode);

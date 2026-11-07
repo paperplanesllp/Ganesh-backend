@@ -387,6 +387,42 @@ VITE_API_BASE_URL=http://localhost:5000/api
 
 Auth requests must use `credentials: "include"` so the browser sends the HTTP-only refresh cookie. The frontend should keep the access token in React memory and should not store refresh tokens or JWT secrets.
 
+## Order Emails
+
+When an order becomes paid (PhonePe status check or webhook), the backend sends:
+
+- an order confirmation to the customer (the email entered at checkout)
+- a "new order" email to `STORE_EMAIL` (comma-separate for several owners)
+
+Emails go through an HTTPS email API, Resend or Brevo, because Render's free plan blocks SMTP ports. Set these on Render (see `.env.example`):
+
+```env
+EMAIL_PROVIDER=resend          # or brevo
+RESEND_API_KEY=re_...          # or BREVO_API_KEY=xkeysib-...
+MAIL_FROM_EMAIL=orders@ganeshpickles.com
+MAIL_FROM_NAME=Ganesh Pickles
+STORE_EMAIL=owner@example.com
+```
+
+- Resend: verify the sending domain in Resend first. Without a verified domain Resend only sends to your own account address.
+- Brevo: verify the sender address (or domain) in Brevo first.
+
+How delivery works:
+
+- Sending runs in the background, so the payment status response never waits for email.
+- Each order records `notifications.customerEmailSentAt`, `storeEmailSentAt`, `attempts` and `lastError`.
+- Failed emails are retried automatically (up to 6 attempts over about 10 hours, for orders paid in the last 3 days) while the server is awake.
+- Admins can resend from Admin -> Orders -> order details -> "Resend emails" (`POST /api/admin/orders/:orderId/resend-emails`, body `{ "target": "missing" | "customer" | "store" | "both" }`).
+- Orders paid before this feature was deployed are never emailed automatically.
+
+Test the email setup with a real order you placed yourself (sends both emails, does not change the order):
+
+```bash
+npm run test:email -- <order-id or customer email>
+```
+
+Check Render logs for lines starting with `[email]`.
+
 ## Remaining Backend Phases
 
 - Product catalog API backed by MongoDB
@@ -395,5 +431,5 @@ Auth requests must use `credentials: "include"` so the browser sends the HTTP-on
 - PhonePe Standard Checkout order creation and payment verification
 - Customer order history
 - Admin product, inventory, and order management
-- Email/SMS notifications
+- SMS notifications
 - Address book and shipping rules

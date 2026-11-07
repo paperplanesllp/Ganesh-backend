@@ -7,6 +7,7 @@ import CategoryVisibility, { managedCategoryNames } from "../models/CategoryVisi
 import { getManagedCategoryVisibility } from "../utils/categoryVisibility.js";
 import ApiError from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { resendOrderNotifications } from "../services/orderNotificationService.js";
 
 function pagination(query = {}) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
@@ -40,6 +41,14 @@ function serializeAdminOrder(order) {
     failedAt: order.failedAt,
     failureReason: order.failureReason,
     notes: order.notes,
+    notifications: {
+      queuedAt: order.notifications?.queuedAt || null,
+      customerEmailSentAt: order.notifications?.customerEmailSentAt || null,
+      storeEmailSentAt: order.notifications?.storeEmailSentAt || null,
+      attempts: order.notifications?.attempts || 0,
+      lastAttemptAt: order.notifications?.lastAttemptAt || null,
+      lastError: order.notifications?.lastError || "",
+    },
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -151,6 +160,33 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   ).lean();
   if (!order) throw new ApiError(404, "Order not found");
   res.status(200).json({ success: true, message: "Order status updated", order: serializeAdminOrder(order) });
+});
+
+const resendTargets = ["missing", "customer", "store", "both"];
+
+export const resendOrderEmails = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.orderId)) throw new ApiError(404, "Order not found");
+  const target = req.body?.target || "missing";
+  if (!resendTargets.includes(target)) {
+    throw new ApiError(422, "Invalid email target", { target: `Use one of: ${resendTargets.join(", ")}` });
+  }
+
+  const { updated, reason } = await resendOrderNotifications(req.params.orderId, target);
+  if (!updated) {
+    if (reason === "not_found") throw new ApiError(404, "Order not found");
+    if (reason === "not_paid") throw new ApiError(409, "Emails are sent only for paid orders");
+    throw new ApiError(409, "Emails for this order are being sent right now. Try again in a minute.");
+  }
+
+  const order = await Order.findById(req.params.orderId).lean();
+  const notifications = order.notifications || {};
+  const allSent = Boolean(notifications.customerEmailSentAt && notifications.storeEmailSentAt);
+  res.status(200).json({
+    success: true,
+    message: allSent ? "Order emails sent" : (notifications.lastError || "Emails could not be sent. Check the email settings."),
+    emailsSent: allSent,
+    order: serializeAdminOrder(order),
+  });
 });
 
 export const listAdminProducts = asyncHandler(async (req, res) => {

@@ -163,6 +163,7 @@ export const getPhonePeStatus = asyncHandler(async (req, res) => {
     orderId: updated._id.toString(),
     paymentStatus: updated.paymentStatus,
     state: updated.phonepe?.state || "PENDING",
+    email: updated.email,
     subtotal: updated.subtotal,
     deliveryCharge: updated.deliveryCharge,
     totalAmount: updated.totalAmount,

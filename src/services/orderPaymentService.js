@@ -1,5 +1,5 @@
 import Order from "../models/Order.js";
-import { sendOrderConfirmationEmail } from "./emailService.js";
+import { notificationQueueFields, queueOrderNotifications } from "./orderNotificationService.js";
 
 export async function applyPhonePeResult(order, response) {
   const { phonePeUpdateFromResponse, mapPhonePeState } = await import("./phonepeService.js");
@@ -20,7 +20,7 @@ export async function applyPhonePeResult(order, response) {
   if (status === "paid") {
     const transition = await Order.updateOne(
       { _id: order._id, paymentStatus: { $ne: "paid" } },
-      { $set: { ...common, paymentStatus: "paid", orderStatus: "confirmed", paidAt: new Date(), failedAt: null } },
+      { $set: { ...common, paymentStatus: "paid", orderStatus: "confirmed", paidAt: new Date(), failedAt: null, ...notificationQueueFields() } },
     );
     transitionedToPaid = transition.modifiedCount === 1;
 
@@ -39,16 +39,9 @@ export async function applyPhonePeResult(order, response) {
     await Order.updateOne({ _id: order._id, paymentStatus: { $ne: "paid" } }, { $set: { ...common, paymentStatus: "pending" } });
   }
 
-  if (transitionedToPaid) {
-    try {
-      const paidOrder = await Order.findById(order._id);
-      if (paidOrder) await sendOrderConfirmationEmail(paidOrder);
-    } catch (emailError) {
-      console.error("[email] Could not prepare order confirmation email.", {
-        orderId: String(order._id), message: emailError?.message || "Unknown error",
-      });
-    }
-  }
+  // Emails are sent in the background so the payment status response is not
+  // delayed by the email provider. Failures are recorded and retried.
+  if (transitionedToPaid) queueOrderNotifications(order._id);
 
   return Order.findById(order._id);
 }
@@ -73,7 +66,7 @@ export async function applyPhonePeWebhookResult(order, response, eventKey) {
         : "",
       paymentStatus: status,
       ...(status === "paid"
-        ? { orderStatus: "confirmed", paidAt: new Date(), failedAt: null }
+        ? { orderStatus: "confirmed", paidAt: new Date(), failedAt: null, ...notificationQueueFields() }
         : status === "failed"
           ? { failedAt: order.failedAt || new Date() }
           : {}),
@@ -84,16 +77,7 @@ export async function applyPhonePeWebhookResult(order, response, eventKey) {
   const result = await Order.updateOne(filter, update);
   const processed = result.modifiedCount === 1;
 
-  if (processed && status === "paid") {
-    try {
-      const paidOrder = await Order.findById(order._id);
-      if (paidOrder) await sendOrderConfirmationEmail(paidOrder);
-    } catch (emailError) {
-      console.error("[email] Could not prepare order confirmation email.", {
-        orderId: String(order._id), message: emailError?.message || "Unknown error",
-      });
-    }
-  }
+  if (processed && status === "paid") queueOrderNotifications(order._id);
 
   return { processed };
-}
+}

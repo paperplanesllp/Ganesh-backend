@@ -12,6 +12,7 @@ import {
   updateOrderStatus,
   updateCategoryVisibility,
   updateReviewStatus,
+  resendOrderEmails,
 } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 
@@ -27,6 +28,7 @@ router.get("/users/:userId", getUser);
 router.get("/orders", listOrders);
 router.get("/orders/:orderId", getOrder);
 router.patch("/orders/:orderId/status", updateOrderStatus);
+router.post("/orders/:orderId/resend-emails", resendOrderEmails);
 router.get("/reviews", listReviews);
 router.patch("/reviews/:reviewId/status", updateReviewStatus);
 router.delete("/reviews/:reviewId", deleteReview);
